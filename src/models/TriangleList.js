@@ -61,7 +61,9 @@ ROS3D.TriangleList = function(options) {
 
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
-  geometry.computeCentroids();
+  if (geometry.computeCentroids) {
+    geometry.computeCentroids();
+  }
   geometry.computeFaceNormals();
 
   this.add(new THREE.Mesh(geometry, material));

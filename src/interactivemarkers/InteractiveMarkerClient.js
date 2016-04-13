@@ -21,6 +21,7 @@
 ROS3D.InteractiveMarkerClient = function(options) {
   var that = this;
   options = options || {};
+  this.pure_client_side = options.pure_client_side;
   this.ros = options.ros;
   this.tfClient = options.tfClient;
   this.topic = options.topic;
@@ -140,7 +141,10 @@ ROS3D.InteractiveMarkerClient.prototype.processUpdate = function(message) {
     }
 
     // create the handle
+    //console.log('new marker:');
+    //console.log(JSON.stringify(msg));
     var handle = new ROS3D.InteractiveMarkerHandle({
+      pure_client_side : that.pure_client_side,
       message : msg,
       feedbackTopic : that.feedbackTopic,
       tfClient : that.tfClient,
@@ -150,6 +154,7 @@ ROS3D.InteractiveMarkerClient.prototype.processUpdate = function(message) {
 
     // create the actual marker
     var intMarker = new ROS3D.InteractiveMarker({
+      pure_client_side : that.pure_client_side,
       handle : handle,
       camera : that.camera,
       path : that.path,
@@ -174,7 +179,9 @@ ROS3D.InteractiveMarkerClient.prototype.processUpdate = function(message) {
     intMarker.addEventListener('menu-select', handle.onMenuSelectBound);
 
     // now listen for any TF changes
-    handle.subscribeTf();
+    if (!that.pure_client_side) {
+      handle.subscribeTf();
+    }
   });
 };
 

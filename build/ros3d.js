@@ -168,6 +168,7 @@ ROS3D.closestAxisPoint = function(axisRay, camera, mousePos) {
   // go back to 3d by shooting a ray
   var vector = new THREE.Vector3(mp.x, mp.y, 0.5);
   projector.unprojectVector(vector, camera);
+  //vector.unproject(camera);
   var mpRay = new THREE.Ray(camera.position, vector.sub(camera.position).normalize());
 
   return ROS3D.findClosestPoint(axisRay, mpRay);
@@ -515,6 +516,7 @@ ROS3D.InteractiveMarker = function(options) {
   options = options || {};
   var handle = options.handle;
   this.name = handle.name;
+  this.pure_client_side = options.pure_client_side;
   var camera = options.camera;
   var path = options.path || '/';
   var loader = options.loader || ROS3D.COLLADA_LOADER_2;
@@ -537,6 +539,7 @@ ROS3D.InteractiveMarker = function(options) {
   // add each control message
   handle.controls.forEach(function(controlMessage) {
     that.add(new ROS3D.InteractiveMarkerControl({
+      pure_client_side : that.pure_client_side,
       parent : that,
       handle : handle,
       message : controlMessage,
@@ -838,6 +841,7 @@ THREE.EventDispatcher.prototype.apply( ROS3D.InteractiveMarker.prototype );
 ROS3D.InteractiveMarkerClient = function(options) {
   var that = this;
   options = options || {};
+  this.pure_client_side = options.pure_client_side;
   this.ros = options.ros;
   this.tfClient = options.tfClient;
   this.topic = options.topic;
@@ -957,7 +961,10 @@ ROS3D.InteractiveMarkerClient.prototype.processUpdate = function(message) {
     }
 
     // create the handle
+    //console.log('new marker:');
+    //console.log(JSON.stringify(msg));
     var handle = new ROS3D.InteractiveMarkerHandle({
+      pure_client_side : that.pure_client_side,
       message : msg,
       feedbackTopic : that.feedbackTopic,
       tfClient : that.tfClient,
@@ -967,6 +974,7 @@ ROS3D.InteractiveMarkerClient.prototype.processUpdate = function(message) {
 
     // create the actual marker
     var intMarker = new ROS3D.InteractiveMarker({
+      pure_client_side : that.pure_client_side,
       handle : handle,
       camera : that.camera,
       path : that.path,
@@ -991,7 +999,9 @@ ROS3D.InteractiveMarkerClient.prototype.processUpdate = function(message) {
     intMarker.addEventListener('menu-select', handle.onMenuSelectBound);
 
     // now listen for any TF changes
-    handle.subscribeTf();
+    if (!that.pure_client_side) {
+      handle.subscribeTf();
+    }
   });
 };
 
@@ -1010,12 +1020,13 @@ ROS3D.InteractiveMarkerClient.prototype.eraseIntMarker = function(intMarkerName)
     handle.unsubscribeTf();
 
     // remove all other listeners
-    handle.removeEventListener('user-pose-change', handle.setPoseFromClientBound);
-    handle.removeEventListener('user-mousedown', handle.onMouseDownBound);
-    handle.removeEventListener('user-mouseup', handle.onMouseUpBound);
-    handle.removeEventListener('user-button-click', handle.onButtonClickBound);
-    handle.removeEventListener('menu-select', handle.onMenuSelectBound);
 
+    targetIntMarker.removeEventListener('user-pose-change', handle.setPoseFromClientBound);
+    targetIntMarker.removeEventListener('user-mousedown', handle.onMouseDownBound);
+    targetIntMarker.removeEventListener('user-mouseup', handle.onMouseUpBound);
+    targetIntMarker.removeEventListener('user-button-click', handle.onButtonClickBound);
+    targetIntMarker.removeEventListener('menu-select', handle.onMenuSelectBound);
+    
     // remove the handle from the map - after leaving this function's scope, there should be no references to the handle
     delete this.interactiveMarkers[intMarkerName];
     targetIntMarker.dispose();
@@ -1044,6 +1055,7 @@ ROS3D.InteractiveMarkerControl = function(options) {
   THREE.Object3D.call(this);
 
   options = options || {};
+  this.pure_client_side = options.pure_client_side;
   this.parent = options.parent;
   var handle = options.handle;
   var message = options.message;
@@ -1195,11 +1207,14 @@ ROS3D.InteractiveMarkerControl = function(options) {
 
   // temporary TFClient to get transformations from InteractiveMarker
   // frame to potential child Marker frames
-  var localTfClient = new ROSLIB.TFClient({
-    ros : handle.tfClient.ros,
-    fixedFrame : handle.message.header.frame_id,
-    serverName : handle.tfClient.serverName
-  });
+  var localTfClient;
+  if (!that.pure_client_side) {
+    localTfClient = new ROSLIB.TFClient({
+      ros : handle.tfClient.ros,
+      fixedFrame : handle.message.header.frame_id,
+      serverName : handle.tfClient.serverName
+    });
+  }
 
   // create visuals (markers)
   message.markers.forEach(function(markerMsg) {
@@ -1223,7 +1238,9 @@ ROS3D.InteractiveMarkerControl = function(options) {
 
         markerHelper.updateMatrixWorld();
         // we only need to set the pose once - at least, this is what RViz seems to be doing, might change in the future
-        localTfClient.unsubscribe(markerMsg.header.frame_id);
+        if (!that.pure_client_side) {
+          localTfClient.unsubscribe(markerMsg.header.frame_id);
+        }
       }
 
       // add the marker
@@ -1233,7 +1250,7 @@ ROS3D.InteractiveMarkerControl = function(options) {
     // If the marker lives in a separate TF Frame, ask the *local* TFClient
     // for the transformation from the InteractiveMarker frame to the
     // sub-Marker frame
-    if (markerMsg.header.frame_id !== '') {
+    if (!that.pure_client_side && markerMsg.header.frame_id !== '') {
       localTfClient.subscribe(markerMsg.header.frame_id, addMarker);
     }
     // If not, just add the marker without changing its pose
@@ -1265,6 +1282,7 @@ ROS3D.InteractiveMarkerControl.prototype.__proto__ = THREE.Object3D.prototype;
  */
 ROS3D.InteractiveMarkerHandle = function(options) {
   options = options || {};
+  this.pure_client_side = options.pure_client_side;
   this.message = options.message;
   this.feedbackTopic = options.feedbackTopic;
   this.tfClient = options.tfClient;
@@ -1285,8 +1303,10 @@ ROS3D.InteractiveMarkerHandle = function(options) {
   this.onMenuSelectBound = this.onMenuSelect.bind(this);
 
   // start by setting the pose
-  this.setPoseFromServer(this.message.pose);
-  this.tfUpdateBound = this.tfUpdate.bind(this);
+  if (!this.pure_client_side) {
+    this.setPoseFromServer(this.message.pose);
+    this.tfUpdateBound = this.tfUpdate.bind(this);
+  }
 };
 ROS3D.InteractiveMarkerHandle.prototype.__proto__ = EventEmitter2.prototype;
 
@@ -1433,7 +1453,9 @@ ROS3D.InteractiveMarkerHandle.prototype.sendFeedback = function(eventType, click
     mouse_point_valid : mousePointValid,
     menu_entry_id : menuEntryID
   };
-  this.feedbackTopic.publish(feedback);
+  if (!this.pure_client_side) {
+    this.feedbackTopic.publish(feedback);
+  }
 };
 
 /**
@@ -2355,7 +2377,7 @@ ROS3D.Arrow.prototype.setLength = function(length) {
  * @param hex - the hex value of the color to use
  */
 ROS3D.Arrow.prototype.setColor = function(hex) {
-  this.geometry.material.color.setHex(hex);
+  this.material.color.setHex(hex);
 };
 
 /**
@@ -2632,7 +2654,9 @@ ROS3D.TriangleList = function(options) {
 
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
-  geometry.computeCentroids();
+  if (geometry.computeCentroids) {
+    geometry.computeCentroids();
+  }
   geometry.computeFaceNormals();
 
   this.add(new THREE.Mesh(geometry, material));
@@ -4049,6 +4073,7 @@ ROS3D.MouseHandler.prototype.processDomEvent = function(domEvent) {
   var deviceY = -top / target.clientHeight * 2 + 1;
   var vector = new THREE.Vector3(deviceX, deviceY, 0.5);
   this.projector.unprojectVector(vector, this.camera);
+  //vector.unproject(this.camera);
   // use the THREE raycaster
   var mouseRaycaster = new THREE.Raycaster(this.camera.position.clone(), vector.sub(
       this.camera.position).normalize());

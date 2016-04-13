@@ -22,6 +22,7 @@ ROS3D.InteractiveMarker = function(options) {
   options = options || {};
   var handle = options.handle;
   this.name = handle.name;
+  this.pure_client_side = options.pure_client_side;
   var camera = options.camera;
   var path = options.path || '/';
   var loader = options.loader || ROS3D.COLLADA_LOADER_2;
@@ -44,6 +45,7 @@ ROS3D.InteractiveMarker = function(options) {
   // add each control message
   handle.controls.forEach(function(controlMessage) {
     that.add(new ROS3D.InteractiveMarkerControl({
+      pure_client_side : that.pure_client_side,
       parent : that,
       handle : handle,
       message : controlMessage,

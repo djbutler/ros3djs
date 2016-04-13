@@ -168,6 +168,7 @@ ROS3D.closestAxisPoint = function(axisRay, camera, mousePos) {
   // go back to 3d by shooting a ray
   var vector = new THREE.Vector3(mp.x, mp.y, 0.5);
   projector.unprojectVector(vector, camera);
+  //vector.unproject(camera);
   var mpRay = new THREE.Ray(camera.position, vector.sub(camera.position).normalize());
 
   return ROS3D.findClosestPoint(axisRay, mpRay);

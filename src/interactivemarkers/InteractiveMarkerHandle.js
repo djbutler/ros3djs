@@ -19,6 +19,7 @@
  */
 ROS3D.InteractiveMarkerHandle = function(options) {
   options = options || {};
+  this.pure_client_side = options.pure_client_side;
   this.message = options.message;
   this.feedbackTopic = options.feedbackTopic;
   this.tfClient = options.tfClient;
@@ -39,8 +40,10 @@ ROS3D.InteractiveMarkerHandle = function(options) {
   this.onMenuSelectBound = this.onMenuSelect.bind(this);
 
   // start by setting the pose
-  this.setPoseFromServer(this.message.pose);
-  this.tfUpdateBound = this.tfUpdate.bind(this);
+  if (!this.pure_client_side) {
+    this.setPoseFromServer(this.message.pose);
+    this.tfUpdateBound = this.tfUpdate.bind(this);
+  }
 };
 ROS3D.InteractiveMarkerHandle.prototype.__proto__ = EventEmitter2.prototype;
 
@@ -187,5 +190,7 @@ ROS3D.InteractiveMarkerHandle.prototype.sendFeedback = function(eventType, click
     mouse_point_valid : mousePointValid,
     menu_entry_id : menuEntryID
   };
-  this.feedbackTopic.publish(feedback);
+  if (!this.pure_client_side) {
+    this.feedbackTopic.publish(feedback);
+  }
 };
